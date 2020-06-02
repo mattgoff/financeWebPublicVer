@@ -1,0 +1,200 @@
+﻿@page "/marketdata"
+
+@using Markets.Data
+@using Markets.Models
+@using Markets.Shared
+@inject IUserData _db
+@inject IHttpClientFactory _clientFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<div>
+  Greetings: @user.Name
+  <br />
+  @* Current Stock List: @user.StockString *@
+</div>
+<br />
+<p>
+    Add New Stock Symbol
+</p>
+
+<EditForm Model = "addStock" OnValidSubmit="@AddStockSymbol">
+  <DataAnnotationsValidator />
+  <ValidationSummary />
+
+  <InputText id="stockSymbol" @bind-Value="addStock.StockString" />
+    <button class="btn btn-primary btn-sm">Submit</button>
+</EditForm>
+
+@* <button class="btn btn-default" @onclick="RefreshPage">Refresh</button> *@
+<br />
+
+<div class="col-12" style="text-align:left">
+    <div class="row">
+
+        <div class="col-md-4" style="display:inline-block">
+            <h4>MarketData</h4>
+        </div>
+
+        <div class="col-md-4" style="display:inline-block"></div>
+
+        <div class="col-md-4" style="text-align:right">
+            <div style="display:inline-block">
+                <h4>
+                    <button class="btn btn-default" @onclick="RefreshPage" @onclick:preventDefault>Refresh <span class="oi oi-reload"></span></button>
+                </h4>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@if (string.IsNullOrWhiteSpace(errorString) == false)
+{
+    <div class="h2">@errorString</div>
+}
+else if (stocks is null)
+{
+    <div class="h4">Loading ...</div>
+}
+else
+{
+    <table class="table table-striped">
+        <thead class="thead-dark">
+            <tr>
+                <th>Symbol</th>
+                <th>Price</th>
+                <th>Change</th>
+                <th>Open</th>
+                <th>Range</th>
+                <th>Name</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (stocks.quoteResponse.result.Length > 0)
+            {
+                @foreach (var stock in stocks.quoteResponse.result)
+                    {
+                        var buttonName = @stock.symbol;
+                        <tr>
+                            <td>@stock.symbol</td>
+                            <td>@stock.regularMarketPrice</td>
+                            <td class="@(stock.regularMarketChange < 0 ? "stockRed" : "stockGreen")">@stock.regularMarketChange</td>
+                            <td>@stock.regularMarketOpen</td>
+                            <td>@stock.regularMarketDayRange</td>
+                            <td>@stock.shortName</td>
+                            <td>
+                                <form>
+                                    <button class="btn btn-default" @onclick="@(e => RemoveStockSymbol(e, buttonName))" @onclick:preventDefault><span name="@stock.symbol" class="oi oi-trash"></span></button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+
+    StockModel stocks;
+    string errorString;
+    private UserModel user;
+    private EditUserStockModel addStock = new EditUserStockModel();
+    private string newStockString { get; set;}
+    protected override async Task OnInitializedAsync()
+    {
+
+        var client = _clientFactory.CreateClient("stocksURI");
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var currentUser = authState.User.Identity.Name;
+
+        if (currentUser != null)
+        {
+            user = _db.GetPerson(currentUser);
+        }
+        else
+        {
+            UserModel u = new UserModel()
+            {
+                Name = "Unregisterd user - If you'd like to save your stock list please register.",
+                StockString = "^DJI,^VIX"
+            };
+            user = u;
+        }
+
+        try
+        {
+            if (user.StockString.Length > 0)
+            {
+                stocks = await client.GetFromJsonAsync<StockModel>($"quote?symbols={user.StockString}");
+                Console.WriteLine($"Response Count: {stocks.quoteResponse.result.Count()}");
+                errorString = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorString = $"There was an error getting our data: { ex.Message }";
+        }
+    }
+
+    private async Task RefreshPage()
+    {
+        var client = _clientFactory.CreateClient("stocksURI");
+        stocks = await client.GetFromJsonAsync<StockModel>($"quote?symbols={user.StockString}");
+    }
+
+    private async Task AddStockSymbol()
+    {
+        var client = _clientFactory.CreateClient("stocksURI");
+
+        if (user.StockString.Length > 1 )
+        {
+            newStockString = user.StockString + "," + addStock.StockString.ToUpper();
+        }
+        else
+        {
+            newStockString = addStock.StockString.ToUpper();
+        }
+
+        UserModel u = new UserModel()
+        {
+            Name = user.Name,
+            StockString = newStockString
+        };
+
+        user = u;
+
+        _db.UpsertPerson(u);
+
+        addStock.StockString = "";
+
+        stocks = await client.GetFromJsonAsync<StockModel>($"quote?symbols={user.StockString}");
+    }
+
+    private async Task RemoveStockSymbol(MouseEventArgs e, string buttonName)
+    {
+        System.Console.WriteLine(buttonName);
+        var client = _clientFactory.CreateClient("stocksURI");
+
+        string[] currentStocks = (user.StockString).Split(",");
+        var resultList = currentStocks.Where( x => x != buttonName);
+        var returnStocks = String.Join(",", resultList);
+
+        UserModel u = new UserModel()
+        {
+            Name = user.Name,
+            StockString = returnStocks
+        };
+
+        user = u;
+
+        _db.UpsertPerson(u);
+
+        if ( user.StockString.Length > 0 )
+        {
+            stocks = await client.GetFromJsonAsync<StockModel>($"quote?symbols={user.StockString}");
+        }
+    }
+}

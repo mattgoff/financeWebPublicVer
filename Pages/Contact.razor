@@ -1,0 +1,89 @@
+﻿@page "/contact"
+@inherits ToastBase
+@using Markets.Services
+@inject ToastService toastService
+
+<h3>Contact us:</h3>
+<EditForm Model="@emailModel" OnValidSubmit="SendEmail">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+<div class="col-12" style="text-align:left">
+    <div class="row">
+      <div class="col-md-6" style="display:inline-block">
+        <div class="from-group" style="text-align:left">
+          <label for="name" class="control-label">Name:</label>
+          <InputText id="name" @bind-Value="emailModel.EmailName" class="form-control" placeholder="Name"/>
+        </div>
+        <br />
+
+        <div class="from-group" style="text-align:left">
+          <label for="address" class="control-label">Email Address:</label>
+        <InputText id="address" @bind-Value="emailModel.EmailAddress" class="form-control" placeholder="Email Address"/>
+        </div>
+        <br />
+        <div class="from-group" style="text-align:left">
+          <label for="subject" class="control-label">Subject:</label>
+      <InputText id="subject" @bind-Value="emailModel.EmailSubject" class="form-control" placeholder="Subject"/>
+        </div>
+        <br />
+        <div class="from-group" style="text-align:left">
+          <label for="body" class="control-label">Message:</label>
+        <InputTextArea id="body" @bind-Value="emailModel.EmailBody" class="form-control" rows="6"/>
+        </div>
+
+
+      </div>
+      <div class="col-md-6" style="display:inline-block">
+
+      </div>
+
+    </div>
+
+</div>
+
+    <br />
+    <button type="submit" class="btn btn-primary btn-sm" >Submit</button>
+</EditForm>
+
+@code {
+
+  private EmailModel emailModel = new EmailModel();
+  private string webApp = "somekeyhere";
+  private void SendEmail()
+  {
+    @* System.Console.WriteLine($"Email from name {emailModel.EmailName}");
+    System.Console.WriteLine($"Email from addres {emailModel.EmailAddress}");
+    System.Console.WriteLine($"Email subject {emailModel.EmailSubject}");
+    System.Console.WriteLine($"Email body {emailModel.EmailBody}"); *@
+    MimeMessage message = new MimeMessage();
+
+    MailboxAddress from = new MailboxAddress(emailModel.EmailName, emailModel.EmailAddress);
+    message.From.Add(from);
+
+    MailboxAddress to = new MailboxAddress("From name", "from smtp address");
+    message.To.Add(to);
+
+    message.Subject = emailModel.EmailSubject;
+
+    BodyBuilder bodyBuilder = new BodyBuilder();
+    bodyBuilder.TextBody = emailModel.EmailBody;
+
+    message.Body = bodyBuilder.ToMessageBody();
+
+    SmtpClient client = new SmtpClient();
+    client.Connect("smtp.gmail.com", 465, true);
+    client.Authenticate("smtp email sender account", webApp);
+
+    client.Send(message);
+    client.Disconnect(true);
+    client.Dispose();
+
+    toastService.ShowToast("Message Sent", ToastLevel.Success);
+
+    emailModel.EmailName = "";
+    emailModel.EmailAddress = "";
+    emailModel.EmailSubject = "";
+    emailModel.EmailBody = "";
+  }
+
+}
